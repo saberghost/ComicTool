@@ -1,44 +1,49 @@
 ﻿using System;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.Primitives;
+using Microsoft.Extensions.Configuration;
 
 namespace ComicCrop
 {
     class Program
     {
-        public static string TarDir { get; set; }
-        public static string CurDir { get; set; }
+        public static AppSettings AppSettings { get; set; } = new AppSettings();
 
         static void Main(string[] args)
         {
-            TarDir = @"E:\Comic";
-            CurDir = @"D:\Comic";
-            FindFile(CurDir);
-            return;
+            var builder = new ConfigurationBuilder().SetBasePath(Directory.GetCurrentDirectory()).AddJsonFile("appsettings.json", true, true).Build();
+            builder.Bind(AppSettings);
+            Console.WriteLine();
 
-            TaskFactory tf = new TaskFactory();
-            string[] filePaths = Directory.GetFiles(@"D:\新建文件夹");
-            Task[] tasks = new Task[filePaths.Length];
-            for (int i = 0; i < filePaths.Length; i++)
-            {
-                tasks[i] = tf.StartNew(Convert, filePaths[i]);
-            }
 
-            Task.WaitAll(tasks);
+            Excute(AppSettings.SrcPath);
 
             Console.WriteLine("Scuess!");
         }
 
-        public static void Convert(object state)
+        public static void CropPictureTask(string SrcDirPath, string DstDirPath)
         {
-            string filePath = state.ToString();
+            TaskFactory tf = new TaskFactory();
+            string[] filePaths = Directory.GetFiles(SrcDirPath);
+            Task[] tasks = new Task[filePaths.Length];
+            for (int i = 0; i < filePaths.Length; i++)
+            {
+                Tuple<string, string> tuple = new Tuple<string, string>(filePaths[i], DstDirPath);
+                tasks[i] = tf.StartNew(CropPicture, tuple);
+            }
+
+            Task.WaitAll(tasks);
+        }
+
+        public static void CropPicture(object state)
+        {
+            Tuple<string, string> tuple = state as Tuple<string, string>;
+            string DstDirPath = tuple.Item2;
+            string filePath = tuple.Item1;
             string fileName = Path.GetFileNameWithoutExtension(filePath);
             string fileExt = Path.GetExtension(filePath);
             fileExt = ".jpg";
@@ -47,7 +52,7 @@ namespace ComicCrop
             {
                 if (image.Width <= image.Height)
                 {
-                    image.Save($@"D:\output\{fileName}{fileExt}");
+                    image.Save(Path.Combine(DstDirPath, $"{fileName}{fileExt}"));
                     return;
                 }
                 Rectangle rectangleLeft = new Rectangle(image.Width / 2, 0, image.Width / 2, image.Height);
@@ -55,36 +60,33 @@ namespace ComicCrop
                 using (var imgLeft = image.Clone(x => x
                        .Crop(rectangleLeft)))
                 {
-                    imgLeft.Save($@"D:\output\{fileName}_1{fileExt}");
+                    imgLeft.Save(Path.Combine(DstDirPath, $"{fileName}_1{fileExt}"));
                 };
                 using (var imgRight = image.Clone(x => x
                        .Crop(rectangleRight)))
                 {
-                    imgRight.Save($@"D:\output\{fileName}_2{fileExt}");
+                    imgRight.Save(Path.Combine(DstDirPath, $"{fileName}_2{fileExt}"));
                 };
             }
         }
 
-        public static void FindFile(string path)
+        public static void Excute(string DirPath)
         {
-            DirectoryInfo dirInfo = new DirectoryInfo(path);
+            DirectoryInfo dirInfo = new DirectoryInfo(DirPath);
             DirectoryInfo[] dirInfos = dirInfo.GetDirectories();
             dirInfos.ToList().ForEach(s =>
             {
-                string dir1 = s.FullName.Replace(CurDir, "").TrimStart('\\');
-                string dir2 = Path.Combine(TarDir, dir1);
-                DirectoryInfo info2 = new DirectoryInfo(dir2);
-                if (!info2.Exists)
+                string tmpDirPath = s.FullName.Replace(AppSettings.SrcPath, "").TrimStart('\\');
+                string DstDirPath = Path.Combine(AppSettings.DstPath, tmpDirPath);
+                DirectoryInfo DstDirInfo = new DirectoryInfo(DstDirPath);
+                if (!DstDirInfo.Exists)
                 {
-                    info2.Create();
+                    DstDirInfo.Create();
                 }
+                CropPictureTask(s.FullName, DstDirPath);
             });
 
-            if (dirInfos.Length == 0)
-            {
-                return;
-            }
-            dirInfos.ToList().ForEach(s => FindFile(s.FullName));
+            dirInfos.ToList().ForEach(s => Excute(s.FullName));
         }
     }
 }
