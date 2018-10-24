@@ -17,11 +17,7 @@ namespace ComicCrop
         {
             var builder = new ConfigurationBuilder().SetBasePath(Directory.GetCurrentDirectory()).AddJsonFile("appsettings.json", true, true).Build();
             builder.Bind(AppSettings);
-            Console.WriteLine();
-
-
             Excute(AppSettings.SrcPath);
-
             Console.WriteLine("Scuess!");
         }
 
@@ -35,7 +31,6 @@ namespace ComicCrop
                 Tuple<string, string> tuple = new Tuple<string, string>(filePaths[i], DstDirPath);
                 tasks[i] = tf.StartNew(CropPicture, tuple);
             }
-
             Task.WaitAll(tasks);
         }
 
@@ -73,19 +68,15 @@ namespace ComicCrop
         public static void Excute(string DirPath)
         {
             DirectoryInfo dirInfo = new DirectoryInfo(DirPath);
-            DirectoryInfo[] dirInfos = dirInfo.GetDirectories();
-            dirInfos.ToList().ForEach(s =>
+            string tmpDirPath = dirInfo.FullName.Replace(AppSettings.SrcPath, "").TrimStart('\\');
+            string DstDirPath = Path.Combine(AppSettings.DstPath, tmpDirPath);
+            DirectoryInfo DstDirInfo = new DirectoryInfo(DstDirPath);
+            if (!DstDirInfo.Exists)
             {
-                string tmpDirPath = s.FullName.Replace(AppSettings.SrcPath, "").TrimStart('\\');
-                string DstDirPath = Path.Combine(AppSettings.DstPath, tmpDirPath);
-                DirectoryInfo DstDirInfo = new DirectoryInfo(DstDirPath);
-                if (!DstDirInfo.Exists)
-                {
-                    DstDirInfo.Create();
-                }
-                CropPictureTask(s.FullName, DstDirPath);
-            });
-
+                DstDirInfo.Create();
+            }
+            CropPictureTask(dirInfo.FullName, DstDirPath);
+            DirectoryInfo[] dirInfos = dirInfo.GetDirectories();
             dirInfos.ToList().ForEach(s => Excute(s.FullName));
         }
     }
